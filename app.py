@@ -1,8 +1,6 @@
-import os
 import re
 import threading
 import uuid
-import urllib.parse
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -40,6 +38,7 @@ def extract_arxiv_id(text: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 _API = "https://export.arxiv.org/api/query"
+_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; arXiv-scraper/1.0)"}
 
 
 def _parse_feed(xml_text: str) -> list[dict]:
@@ -74,14 +73,16 @@ def _parse_feed(xml_text: str) -> list[dict]:
 
 
 def fetch_by_id(arxiv_id: str) -> list[dict]:
-    r = requests.get(_API, params={"id_list": arxiv_id}, timeout=15)
+    # Build URL directly — using params= would percent-encode the slash in old-style
+    # IDs like cond-mat/0110438, which causes the arXiv API to time out.
+    r = requests.get(f"{_API}?id_list={arxiv_id}", headers=_HEADERS, timeout=15)
     r.raise_for_status()
     return _parse_feed(r.text)
 
 
 def fetch_by_title(title: str) -> list[dict]:
     q = f'ti:"{title}"'
-    r = requests.get(_API, params={"search_query": q, "max_results": 1}, timeout=15)
+    r = requests.get(_API, params={"search_query": q, "max_results": 1}, headers=_HEADERS, timeout=15)
     r.raise_for_status()
     return _parse_feed(r.text)
 
@@ -142,7 +143,7 @@ def api_download():
             else:
                 pdf_url = f"https://arxiv.org/pdf/{arxiv_id}"
                 try:
-                    resp = requests.get(pdf_url, timeout=60, stream=True)
+                    resp = requests.get(pdf_url, headers=_HEADERS, timeout=60, stream=True)
                     resp.raise_for_status()
                     with open(dest, "wb") as fh:
                         for chunk in resp.iter_content(chunk_size=16384):
