@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>arXiv Batch Downloader</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3250;
+      --accent: #5b8def;
+      --accent-hover: #7aa3f5;
+      --green: #3ecf8e;
+      --red: #f87171;
+      --yellow: #fbbf24;
+      --text: #e2e8f0;
+      --muted: #8892aa;
+      --radius: 10px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    header {
+      max-width: 860px;
+      margin: 0 auto 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    header .logo {
+      width: 42px; height: 42px;
+      background: var(--accent);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 18px; color: #fff; flex-shrink: 0;
+    }
+    header h1 { font-size: 1.4rem; font-weight: 700; }
+    header p  { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      max-width: 860px;
+      margin: 0 auto 1.5rem;
+    }
+
+    label { display: block; font-size: 0.82rem; color: var(--muted); margin-bottom: 0.5rem; font-weight: 500; letter-spacing: .02em; text-transform: uppercase; }
+
+    textarea {
+      width: 100%;
+      height: 150px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.9rem;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      padding: 0.75rem 1rem;
+      resize: vertical;
+      outline: none;
+      transition: border-color .2s;
+    }
+    textarea:focus { border-color: var(--accent); }
+    textarea::placeholder { color: var(--muted); }
+
+    .hint { font-size: 0.78rem; color: var(--muted); margin-top: 0.5rem; line-height: 1.5; }
+    .hint code { background: var(--surface2); border-radius: 4px; padding: 1px 5px; font-size: 0.76rem; color: var(--accent-hover); }
+
+    .btn-row { display: flex; gap: 0.75rem; margin-top: 1rem; flex-wrap: wrap; }
+
+    button {
+      display: inline-flex; align-items: center; gap: 0.45rem;
+      padding: 0.55rem 1.2rem;
+      border: none; border-radius: 7px;
+      font-size: 0.88rem; font-weight: 600; cursor: pointer;
+      transition: background .15s, opacity .15s;
+    }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:not(:disabled):hover { background: var(--accent-hover); }
+
+    .btn-success { background: var(--green); color: #0f1117; }
+    .btn-success:not(:disabled):hover { filter: brightness(1.1); }
+
+    .btn-ghost {
+      background: transparent; color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:not(:disabled):hover { color: var(--text); border-color: var(--muted); }
+
+    /* ── spinner ── */
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,.25);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .65s linear infinite;
+      display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── results ── */
+    #results-section { display: none; }
+
+    .results-header {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: .5rem;
+      margin-bottom: 1rem;
+    }
+    .results-header h2 { font-size: 1rem; font-weight: 600; }
+    .select-all-row { display: flex; align-items: center; gap: .5rem; font-size: .82rem; color: var(--muted); }
+    .select-all-row input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+
+    #articles-list { display: flex; flex-direction: column; gap: .75rem; }
+
+    .article-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.1rem;
+      display: grid;
+      grid-template-columns: 24px 1fr auto;
+      gap: 0 .9rem;
+      align-items: start;
+      transition: border-color .2s;
+    }
+    .article-card:hover { border-color: #3e4466; }
+    .article-card.not-found { opacity: .55; }
+    .article-card input[type=checkbox] {
+      margin-top: 3px; accent-color: var(--accent);
+      width: 16px; height: 16px; cursor: pointer; flex-shrink: 0;
+    }
+
+    .article-meta { min-width: 0; }
+    .article-title {
+      font-size: .92rem; font-weight: 600; line-height: 1.4;
+      white-space: normal; word-break: break-word;
+      margin-bottom: .25rem;
+    }
+    .article-title a { color: var(--text); text-decoration: none; }
+    .article-title a:hover { color: var(--accent-hover); }
+
+    .article-authors { font-size: .78rem; color: var(--muted); margin-bottom: .3rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .article-summary { font-size: .78rem; color: var(--muted); line-height: 1.5; display: none; margin-top: .4rem; }
+    .article-summary.visible { display: block; }
+
+    .article-id {
+      font-size: .73rem; font-family: monospace;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 4px; padding: 2px 6px; color: var(--muted);
+      white-space: nowrap; margin-right: .4rem;
+    }
+    .article-year { font-size: .73rem; color: var(--muted); }
+
+    .toggle-abstract {
+      font-size: .72rem; color: var(--accent); cursor: pointer;
+      background: none; border: none; padding: 0; font-weight: 500;
+      margin-left: .35rem;
+    }
+    .toggle-abstract:hover { color: var(--accent-hover); }
+
+    .badge {
+      font-size: .7rem; font-weight: 700; padding: 3px 8px;
+      border-radius: 20px; flex-shrink: 0; white-space: nowrap; align-self: start;
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .badge-found   { background: rgba(62,207,142,.15); color: var(--green); border: 1px solid rgba(62,207,142,.3); }
+    .badge-missing { background: rgba(248,113,113,.12); color: var(--red);   border: 1px solid rgba(248,113,113,.25); }
+    .badge-error   { background: rgba(251,191,36,.12);  color: var(--yellow); border: 1px solid rgba(251,191,36,.25); }
+    .badge-cached  { background: rgba(91,141,239,.12); color: var(--accent); border: 1px solid rgba(91,141,239,.25); }
+
+    .query-label { font-size: .72rem; color: var(--muted); margin-bottom: .3rem; font-style: italic; }
+
+    /* ── download progress ── */
+    #progress-section { display: none; }
+
+    .progress-bar-wrap {
+      background: var(--surface2); border-radius: 20px; height: 8px;
+      overflow: hidden; margin: .75rem 0;
+    }
+    .progress-bar-fill {
+      height: 100%; background: var(--accent);
+      border-radius: 20px; width: 0%;
+      transition: width .35s ease;
+    }
+
+    #progress-log {
+      font-family: monospace; font-size: .78rem; color: var(--muted);
+      max-height: 130px; overflow-y: auto;
+      background: var(--surface2); border-radius: 6px;
+      padding: .6rem .8rem;
+      border: 1px solid var(--border);
+    }
+    #progress-log .log-ok   { color: var(--green); }
+    #progress-log .log-err  { color: var(--red); }
+    #progress-log .log-info { color: var(--muted); }
+
+    .stats-row { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: .25rem; }
+    .stat { font-size: .82rem; color: var(--muted); }
+    .stat span { color: var(--text); font-weight: 600; }
+
+    #done-links { margin-top: .75rem; display: flex; flex-wrap: wrap; gap: .5rem; }
+    .dl-link {
+      font-size: .78rem; padding: .3rem .7rem;
+      background: rgba(62,207,142,.12); color: var(--green);
+      border: 1px solid rgba(62,207,142,.25); border-radius: 5px;
+      text-decoration: none;
+    }
+    .dl-link:hover { background: rgba(62,207,142,.22); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">aX</div>
+  <div>
+    <h1>arXiv Batch Downloader</h1>
+    <p>Resolve &amp; download arXiv papers in bulk</p>
+  </div>
+</header>
+
+<!-- ── Input card ── -->
+<div class="card">
+  <label for="input-area">Articles &mdash; one per line</label>
+  <textarea id="input-area" placeholder="2401.12345&#10;arXiv:2310.06825&#10;https://arxiv.org/abs/1706.03762&#10;Attention Is All You Need"></textarea>
+  <p class="hint">
+    Accepts: arXiv IDs&nbsp;<code>2301.12345</code>, full URLs, <code>arXiv:xxxx</code> prefixes,
+    old-style IDs&nbsp;<code>cs.AI/0607046</code>, or paper <strong>titles</strong> (best-match search).
+  </p>
+  <div class="btn-row">
+    <button class="btn-primary" id="btn-search">
+      <div class="spinner" id="spin-search"></div>
+      <span>Search &amp; Verify</span>
+    </button>
+    <button class="btn-ghost" id="btn-clear">Clear</button>
+  </div>
+</div>
+
+<!-- ── Results card ── -->
+<div class="card" id="results-section">
+  <div class="results-header">
+    <h2>Results</h2>
+    <div class="select-all-row">
+      <input type="checkbox" id="chk-select-all" title="Select / deselect all found articles" />
+      <label for="chk-select-all" style="text-transform:none;font-size:.82rem;color:var(--muted);cursor:pointer;">Select all found</label>
+    </div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat">Found: <span id="stat-found">0</span></div>
+    <div class="stat">Missing: <span id="stat-missing">0</span></div>
+    <div class="stat">Selected: <span id="stat-selected">0</span></div>
+  </div>
+
+  <div id="articles-list"></div>
+
+  <div class="btn-row" style="margin-top:1.25rem;">
+    <button class="btn-success" id="btn-download" disabled>
+      <div class="spinner" id="spin-dl"></div>
+      <span>Download Selected PDFs</span>
+    </button>
+  </div>
+</div>
+
+<!-- ── Progress card ── -->
+<div class="card" id="progress-section">
+  <h2 style="font-size:1rem;font-weight:600;margin-bottom:.75rem;">Download Progress</h2>
+  <div class="stats-row">
+    <div class="stat">Progress: <span id="prog-count">0 / 0</span></div>
+    <div class="stat">Status: <span id="prog-status">—</span></div>
+  </div>
+  <div class="progress-bar-wrap"><div class="progress-bar-fill" id="prog-bar"></div></div>
+  <div id="progress-log"></div>
+  <div id="done-links"></div>
+</div>
+
+<script>
+/* ── helpers ── */
+const $  = id => document.getElementById(id);
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+/* ── search ── */
+$('btn-search').addEventListener('click', async () => {
+  const lines = $('input-area').value.split('\n').map(l=>l.trim()).filter(Boolean);
+  if (!lines.length) return;
+
+  setSearchLoading(true);
+  $('results-section').style.display = 'none';
+  $('progress-section').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/search', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({items: lines})
+    });
+    const data = await res.json();
+    renderResults(data);
+  } catch(e) {
+    alert('Search failed: ' + e.message);
+  } finally {
+    setSearchLoading(false);
+  }
+});
+
+$('btn-clear').addEventListener('click', () => {
+  $('input-area').value = '';
+  $('results-section').style.display = 'none';
+  $('progress-section').style.display = 'none';
+});
+
+function setSearchLoading(on) {
+  $('btn-search').disabled = on;
+  $('spin-search').style.display = on ? 'block' : 'none';
+}
+
+/* ── render results ── */
+function renderResults(data) {
+  const list = $('articles-list');
+  list.innerHTML = '';
+  let found = 0, missing = 0;
+
+  data.forEach(item => {
+    const card = document.createElement('div');
+    const isFound = item.status === 'found';
+    if (!isFound) missing++; else found++;
+    card.className = 'article-card' + (isFound ? '' : ' not-found');
+    card.dataset.id = isFound ? item.article.id : '';
+
+    const chkId = 'chk-' + Math.random().toString(36).slice(2);
+    const badge = isFound
+      ? '<span class="badge badge-found">Found</span>'
+      : (item.status === 'error'
+          ? `<span class="badge badge-error" title="${esc(item.error||'')}">Error</span>`
+          : '<span class="badge badge-missing">Not found</span>');
+
+    if (isFound) {
+      const a = item.article;
+      const authStr = a.authors.length
+        ? a.authors.slice(0,3).join(', ') + (a.authors.length > 3 ? ' et al.' : '')
+        : 'Unknown';
+      const year = a.published ? a.published.slice(0,4) : '';
+      const summaryId = 'summ-' + chkId;
+      card.innerHTML = `
+        <input type="checkbox" id="${chkId}" />
+        <div class="article-meta">
+          <div class="query-label">Query: ${esc(item.query)}</div>
+          <div class="article-title">
+            <a href="https://arxiv.org/abs/${esc(a.id)}" target="_blank" rel="noopener">${esc(a.title)}</a>
+          </div>
+          <div class="article-authors">${esc(authStr)}</div>
+          <div>
+            <span class="article-id">${esc(a.id)}</span>
+            <span class="article-year">${year}</span>
+            ${a.summary ? `<button class="toggle-abstract" data-target="${summaryId}">Abstract ▾</button>` : ''}
+          </div>
+          ${a.summary ? `<div class="article-summary" id="${summaryId}">${esc(a.summary)}…</div>` : ''}
+        </div>
+        ${badge}`;
+    } else {
+      card.innerHTML = `
+        <span></span>
+        <div class="article-meta">
+          <div class="query-label">Query: ${esc(item.query)}</div>
+          <div class="article-title" style="color:var(--muted)">(no match found)</div>
+        </div>
+        ${badge}`;
+    }
+    list.appendChild(card);
+  });
+
+  // abstract toggles
+  list.querySelectorAll('.toggle-abstract').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const el = document.getElementById(btn.dataset.target);
+      el.classList.toggle('visible');
+      btn.textContent = el.classList.contains('visible') ? 'Abstract ▴' : 'Abstract ▾';
+    });
+  });
+
+  // checkbox listeners
+  list.querySelectorAll('input[type=checkbox]').forEach(chk => {
+    chk.addEventListener('change', updateSelection);
+  });
+
+  $('stat-found').textContent   = found;
+  $('stat-missing').textContent = missing;
+  $('results-section').style.display = 'block';
+  updateSelection();
+}
+
+/* ── select-all ── */
+$('chk-select-all').addEventListener('change', function() {
+  document.querySelectorAll('#articles-list .article-card:not(.not-found) input[type=checkbox]')
+    .forEach(c => c.checked = this.checked);
+  updateSelection();
+});
+
+function updateSelection() {
+  const all    = [...document.querySelectorAll('#articles-list .article-card:not(.not-found) input[type=checkbox]')];
+  const checked = all.filter(c => c.checked);
+  $('stat-selected').textContent = checked.length;
+  $('btn-download').disabled = checked.length === 0;
+  $('chk-select-all').indeterminate = checked.length > 0 && checked.length < all.length;
+  $('chk-select-all').checked = all.length > 0 && checked.length === all.length;
+}
+
+/* ── download ── */
+$('btn-download').addEventListener('click', async () => {
+  const checked = [...document.querySelectorAll('#articles-list .article-card:not(.not-found) input[type=checkbox]:checked')];
+  const ids = checked.map(c => c.closest('.article-card').dataset.id).filter(Boolean);
+  if (!ids.length) return;
+
+  $('btn-download').disabled = true;
+  $('spin-dl').style.display = 'block';
+
+  const res = await fetch('/api/download', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ids})
+  });
+  const {task_id} = await res.json();
+
+  $('spin-dl').style.display = 'none';
+  showProgress(task_id, ids.length);
+});
+
+/* ── progress polling ── */
+function showProgress(taskId, total) {
+  const sec = $('progress-section');
+  sec.style.display = 'block';
+  sec.scrollIntoView({behavior:'smooth', block:'nearest'});
+  $('prog-count').textContent = `0 / ${total}`;
+  $('prog-status').textContent = 'Running…';
+  $('prog-bar').style.width = '0%';
+  $('progress-log').innerHTML = '';
+  $('done-links').innerHTML = '';
+
+  let lastDone = 0;
+
+  const interval = setInterval(async () => {
+    try {
+      const r = await fetch(`/api/status/${taskId}`);
+      const t = await r.json();
+
+      const pct = total > 0 ? Math.round((t.done / total) * 100) : 0;
+      $('prog-bar').style.width = pct + '%';
+      $('prog-count').textContent = `${t.done} / ${total}`;
+      $('prog-status').textContent = t.status === 'complete' ? 'Complete ✓' : 'Downloading…';
+
+      // log new entries
+      const log = $('progress-log');
+      const newFiles = (t.files || []).slice(lastDone);
+      newFiles.forEach(f => {
+        log.innerHTML += `<div class="log-ok">✓ ${esc(f.id)}</div>`;
+      });
+      const newErrors = (t.errors || []).slice(Math.max(0,(t.errors||[]).length - (t.done - lastDone)));
+      newErrors.forEach(e => {
+        log.innerHTML += `<div class="log-err">✗ ${esc(e.id)}: ${esc(e.error)}</div>`;
+      });
+      if (newFiles.length || newErrors.length) {
+        log.scrollTop = log.scrollHeight;
+      }
+      lastDone = t.done;
+
+      if (t.status === 'complete') {
+        clearInterval(interval);
+        $('btn-download').disabled = false;
+        // render download links
+        const linksDiv = $('done-links');
+        (t.files || []).forEach(f => {
+          linksDiv.innerHTML += `<a class="dl-link" href="/downloads/${esc(f.file)}" download>${esc(f.file)}</a>`;
+        });
+      }
+    } catch(e) {
+      clearInterval(interval);
+    }
+  }, 1000);
+}
+</script>
+</body>
+</html>
